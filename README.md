@@ -1,6 +1,10 @@
-![Terrace](https://misfra.me/img/2018/terrace.png)
+<img src='https://user-images.githubusercontent.com/379404/44446531-11624680-a59a-11e8-8ddf-a4113d4016a5.png' height=200 alt='Terrace' />
 
-Terrace storage engine
+Terrace is a storage format for JSON events.
+
+## Background
+
+See https://misfra.me/2018/08/05/terrace/.
 
 ## License
 
