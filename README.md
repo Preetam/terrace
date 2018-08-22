@@ -2,6 +2,12 @@
 
 Terrace is a storage format for JSON events.
 
+---
+
+[![GoDoc](https://godoc.org/github.com/Preetam/terrace?status.svg)](https://godoc.org/github.com/Preetam/terrace)
+
+---
+
 ## Background
 
 See https://misfra.me/2018/08/05/terrace/.
