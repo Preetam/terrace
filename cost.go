@@ -2,20 +2,20 @@ package terrace
 
 const (
 	// CostLevel is the cost for a level access.
-	CostLevel = 1000
+	CostLevel = 10
 	// CostEvent is the cost for an event access.
-	CostEvent = 1
+	CostEvent = 100
 )
 
-func calculateCost(level *Level, cs ConstraintSet) int {
+func calculateCost(level *Level, cs ConstraintSet, eventsScale float64) int {
 	if !cs.CheckLevel(level) {
 		// Doesn't meet constraints; skipped.
 		return 0
 	}
 	cost := 0
 	for _, sublevel := range level.SubLevels {
-		cost += CostLevel + calculateCost(sublevel, cs)
+		cost += CostLevel + calculateCost(sublevel, cs, eventsScale)
 	}
-	cost += CostEvent * len(level.Events)
+	cost += int(eventsScale * float64(CostEvent*len(level.Events)))
 	return cost
 }
