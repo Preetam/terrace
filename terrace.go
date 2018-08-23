@@ -62,7 +62,7 @@ func (l *Level) Push(event Event, sublevels []string, columnRanges map[string][]
 	// Check if sublevel column exists
 	if _, ok := event[l.SublevelColumn]; !ok {
 		// Nope
-		l.Events = append(l.Events)
+		l.Events = append(l.Events, event)
 		return
 	}
 
