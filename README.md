@@ -4,7 +4,7 @@ Terrace is a storage format for JSON events.
 
 ---
 
-[![GoDoc](https://godoc.org/github.com/Preetam/terrace?status.svg)](https://godoc.org/github.com/Preetam/terrace)
+[![GoDoc](https://godoc.org/github.com/Preetam/terrace?status.svg)](https://godoc.org/github.com/Preetam/terrace) [![CircleCI](https://circleci.com/gh/Preetam/terrace.svg?style=svg)](https://circleci.com/gh/Preetam/terrace)
 
 ---
 
