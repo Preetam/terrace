@@ -1,5 +1,22 @@
 package terrace
 
+/**
+ * Copyright (C) 2018 Preetam Jinka
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 import (
 	"encoding/json"
 	"fmt"
@@ -25,7 +42,7 @@ func fromJSON(s string) interface{} {
 }
 
 // Generate generates a Level.
-func Generate(logger *log.Logger, events []Event, cs ConstraintSet) (*Level, error) {
+func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet) (*Level, error) {
 	var bestLevel *Level
 	var bestLevelCost = int(math.MaxInt64)
 	var bestColumnOrder = []string{}
@@ -64,9 +81,11 @@ ORDERINGS_LOOP:
 				level.Push(e, []string(columnOrder), columnRanges)
 			}
 
-			//level.Trim()
-			cost := calculateCost(level, cs, (float64(len(events)) / 1000))
-			logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
+		  cost := 0
+		  for _, cs := range constraints {
+			  cost += calculateCost(level, cs, (float64(len(events)) / 1000))
+		  }
+      logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
 
 			if cost < bestLevelCost {
 				bestLevel = level

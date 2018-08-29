@@ -14,4 +14,4 @@ See https://misfra.me/2018/08/05/terrace/.
 
 ## License
 
-BSD (see LICENSE)
+AGPL 3.0 (see LICENSE)
