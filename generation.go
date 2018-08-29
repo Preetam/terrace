@@ -81,11 +81,11 @@ ORDERINGS_LOOP:
 				level.Push(e, []string(columnOrder), columnRanges)
 			}
 
-		  cost := 0
-		  for _, cs := range constraints {
-			  cost += calculateCost(level, cs, (float64(len(events)) / 1000))
-		  }
-      logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
+			cost := 0
+			for _, cs := range constraints {
+				cost += calculateCost(level, cs, (float64(len(events)) / 1000))
+			}
+			logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
 
 			if cost < bestLevelCost {
 				bestLevel = level
