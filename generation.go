@@ -55,35 +55,59 @@ func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet) (
 	columnRanges := getColumnRangesForColumnSet(columnSet, 16, events)
 	logger.Printf("Generation: Using column ranges %s", toJSON(columnRanges))
 
-	for _, columnOrder := range orderings {
-		if rand.Float64() > (50 / float64(len(orderings))) {
+	seenOrdering := map[string]bool{}
+
+ORDERINGS_LOOP:
+	for _, allColumns := range orderings {
+		if rand.Float64() > (4000 / float64(len(orderings))) {
 			continue
 		}
-		logger.Printf("Generation: Considering column order %v", columnOrder)
-		level := &Level{}
+		for i := 1; i < len(allColumns); i++ {
+			columnOrder := allColumns[:i]
 
-		for _, e := range events {
-			if rand.Float64() > (1000 / float64(len(events))) {
+			if seenOrdering[strings.Join(columnOrder, "")] {
 				continue
 			}
-			level.Push(e, []string(columnOrder), columnRanges)
-		}
+			seenOrdering[strings.Join(columnOrder, "")] = true
 
-		level.Trim()
+			// Rough filter: ignore orderings that are not constrained by
+			// the first column.
+			skipOrdering := true
+			for _, cs := range constraints {
+				if _, ok := cs[columnOrder[0]]; ok {
+					skipOrdering = false
+					break
+				}
+			}
+			if skipOrdering {
+				continue
+			}
+			level := &Level{}
 
-		cost := 0
-		for _, cs := range constraints {
-			cost += calculateCost(level, cs)
-		}
+			for _, e := range events {
+				if rand.Float64() > (1000 / float64(len(events))) {
+					continue
+				}
+				level.Push(e, []string(columnOrder), columnRanges)
+			}
 
-		if cost <= bestLevelCost {
-			bestLevel = level
-			bestLevelCost = cost
-			bestColumnOrder = []string(columnOrder)
+			cost := 0
+			for _, cs := range constraints {
+				cost += calculateCost(level, cs, (float64(len(events)) / 1000))
+			}
+			logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
+
+			if cost < bestLevelCost {
+				bestLevel = level
+				bestLevelCost = cost
+				bestColumnOrder = []string(columnOrder)
+			} else {
+				continue ORDERINGS_LOOP
+			}
 		}
 	}
 
-	logger.Printf("Generation: Best column order: %v", bestColumnOrder)
+	logger.Printf("Generation: Best column order with cost %d: %v", bestLevelCost, bestColumnOrder)
 
 	logger.Printf("Generation: Generating final level")
 	bestLevel = &Level{}
