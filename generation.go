@@ -69,7 +69,17 @@ ORDERINGS_LOOP:
 				continue
 			}
 			seenOrdering[strings.Join(columnOrder, "")] = true
-			if _, ok := cs[columnOrder[0]]; !ok {
+
+			// Rough filter: ignore orderings that are not constrained by
+			// the first column.
+			skipOrdering := true
+			for _, cs := range constraints {
+				if _, ok := cs[columnOrder[0]]; ok {
+					skipOrdering = false
+					break
+				}
+			}
+			if skipOrdering {
 				continue
 			}
 			level := &Level{}
