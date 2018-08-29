@@ -53,8 +53,8 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	cs := terrace.ConstraintSet{}
-	err = json.NewDecoder(constraintsFile).Decode(&cs)
+	constraints := []terrace.ConstraintSet{}
+	err = json.NewDecoder(constraintsFile).Decode(&constraints)
 	if err != nil {
 		logger.Fatalf("error reading constraints file: %v", err)
 	}
@@ -72,12 +72,12 @@ func main() {
 		events = append(events, e)
 	}
 
-	level, err := terrace.Generate(logger, events, cs)
+	level, err := terrace.Generate(logger, events, constraints)
 	if err != nil {
 		logger.Fatalf("error generating Terrace file: %v", err)
 	}
 
-	outFile, err := os.OpenFile(*outFileFlag, os.O_RDWR|os.O_CREATE, 0644)
+	outFile, err := os.OpenFile(*outFileFlag, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		logger.Fatal(err)
 	}
