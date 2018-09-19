@@ -62,7 +62,7 @@ ORDERINGS_LOOP:
 		if rand.Float64() > (4000 / float64(len(orderings))) {
 			continue
 		}
-		for i := 1; i < len(allColumns); i++ {
+		for i := 1; i <= len(allColumns); i++ {
 			columnOrder := allColumns[:i]
 
 			if seenOrdering[strings.Join(columnOrder, "")] {
@@ -91,6 +91,7 @@ ORDERINGS_LOOP:
 				level.Push(e, []string(columnOrder), columnRanges)
 			}
 
+			level.Trim()
 			cost := 0
 			for _, cs := range constraints {
 				cost += calculateCost(level, cs, (float64(len(events)) / 1000))

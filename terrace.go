@@ -121,6 +121,7 @@ func (l *Level) Trim() {
 		for k, v := range l.SubLevels[0].Fixed {
 			l.Fixed[k] = v
 		}
+		l.SublevelColumn = l.SubLevels[0].SublevelColumn
 		l.SubLevels = l.SubLevels[0].SubLevels
 	}
 
