@@ -229,21 +229,21 @@ func (r StringColumnRange) Single() bool {
 	return r.Min == r.Max
 }
 
-// ConstraintCondition represents a constraint condition.
-type ConstraintCondition string
+// ConstraintOperator represents a constraint operator.
+type ConstraintOperator string
 
 const (
-	// ConstraintConditionEquals is an equals condition.
-	ConstraintConditionEquals ConstraintCondition = "="
-	// ConstraintConditionNotEquals is a not equals condition.
-	ConstraintConditionNotEquals = "!="
+	// ConstraintOperatorEquals is an equals operator.
+	ConstraintOperatorEquals ConstraintOperator = "="
+	// ConstraintOperatorNotEquals is a not equals operator.
+	ConstraintOperatorNotEquals = "!="
 )
 
 // Constraint represents a constraint for a particular column.
 type Constraint struct {
-	Column    string              `json:"column"`
-	Condition ConstraintCondition `json:"condition"`
-	Value     interface{}         `json:"value"`
+	Column   string             `json:"column"`
+	Operator ConstraintOperator `json:"operator"`
+	Value    interface{}        `json:"value"`
 }
 
 // ConstraintSet is a set of constraints for a number of columns.
@@ -255,11 +255,11 @@ func (cs ConstraintSet) CheckLevel(level *Level) bool {
 	columnConstraints := cs[level.Column]
 	for _, cons := range columnConstraints {
 		if level.Range.Contains(cons.Value) {
-			if cons.Condition == ConstraintConditionNotEquals {
+			if cons.Operator == ConstraintOperatorNotEquals {
 				return false
 			}
 		} else {
-			if cons.Condition == ConstraintConditionEquals {
+			if cons.Operator == ConstraintOperatorEquals {
 				return false
 			}
 		}
