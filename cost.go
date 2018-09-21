@@ -1,5 +1,7 @@
 package terrace
 
+import "encoding/json"
+
 /**
  * Copyright (C) 2018 Preetam Jinka
  *
@@ -24,15 +26,27 @@ const (
 	CostEvent = 100
 )
 
-func calculateCost(level *Level, cs ConstraintSet, eventsScale float64) int {
-	if !cs.CheckLevel(level) {
-		// Doesn't meet constraints; skipped.
-		return 0
+const (
+	CostTypeAccess = iota
+	CostTypeSize
+)
+
+func calculateCost(costType int, level *Level, cs ConstraintSet, eventsScale float64) int {
+	if costType == CostTypeAccess {
+		if !cs.CheckLevel(level) {
+			// Doesn't meet constraints; skipped.
+			return 0
+		}
+		cost := 0
+		for _, sublevel := range level.SubLevels {
+			cost += CostLevel + calculateCost(costType, sublevel, cs, eventsScale)
+		}
+		cost += int(eventsScale * float64(CostEvent*len(level.Events)))
+		return cost
+	} else if costType == CostTypeSize {
+		b, _ := json.Marshal(level)
+		return len(b)
+	} else {
+		panic("terrace: unknown cost type")
 	}
-	cost := 0
-	for _, sublevel := range level.SubLevels {
-		cost += CostLevel + calculateCost(sublevel, cs, eventsScale)
-	}
-	cost += int(eventsScale * float64(CostEvent*len(level.Events)))
-	return cost
 }

@@ -42,7 +42,7 @@ func fromJSON(s string) interface{} {
 }
 
 // Generate generates a Level.
-func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet) (*Level, error) {
+func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet, costType int) (*Level, error) {
 	var bestLevel *Level
 	var bestLevelCost = int(math.MaxInt64)
 	var bestColumnOrder = []string{}
@@ -94,7 +94,7 @@ ORDERINGS_LOOP:
 			level.Trim()
 			cost := 0
 			for _, cs := range constraints {
-				cost += calculateCost(level, cs, (float64(len(events)) / 1000))
+				cost += calculateCost(costType, level, cs, (float64(len(events)) / 1000))
 			}
 			logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
 
