@@ -38,7 +38,7 @@ func calculateCost(costType int, level *Level, cs ConstraintSet, eventsScale flo
 			return 0
 		}
 		cost := 0
-		for _, sublevel := range level.SubLevels {
+		for _, sublevel := range level.Sublevels {
 			cost += CostLevel + calculateCost(costType, sublevel, cs, eventsScale)
 		}
 		cost += int(eventsScale * float64(CostEvent*len(level.Events)))

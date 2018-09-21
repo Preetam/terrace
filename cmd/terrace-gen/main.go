@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -91,4 +92,6 @@ func main() {
 	if err != nil {
 		logger.Fatalf("error writing Terrace file: %v", err)
 	}
+
+	fmt.Println(level)
 }
