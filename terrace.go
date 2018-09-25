@@ -43,7 +43,7 @@ type Level struct {
 	// Range of values covered by this level
 	Range          ColumnRange            `json:"range,omitempty"`
 	SublevelColumn string                 `json:"sublevel_column,omitempty"`
-	SubLevels      []*Level               `json:"sublevels,omitempty"`
+	Sublevels      []*Level               `json:"sublevels,omitempty"`
 	Events         []Event                `json:"events,omitempty"`
 	Fixed          map[string]interface{} `json:"fixed,omitempty"`
 	Count          int                    `json:"count"`
@@ -84,13 +84,13 @@ func (l *Level) Push(event Event, sublevels []string, columnRanges map[string][]
 	}
 
 	// Create sublevels if we need to
-	if len(l.SubLevels) == 0 {
+	if len(l.Sublevels) == 0 {
 		for _, r := range columnRanges[l.SublevelColumn] {
-			l.SubLevels = append(l.SubLevels, &Level{Column: l.SublevelColumn, Range: r})
+			l.Sublevels = append(l.Sublevels, &Level{Column: l.SublevelColumn, Range: r})
 		}
 	}
 
-	for _, sublevel := range l.SubLevels {
+	for _, sublevel := range l.Sublevels {
 		if sublevel.Range.Contains(event[l.SublevelColumn]) {
 			if sublevel.Range.Single() {
 				event = event.CloneWithout(l.SublevelColumn)
@@ -105,24 +105,24 @@ func (l *Level) Push(event Event, sublevels []string, columnRanges map[string][]
 // Trim flattens a level and removes any unnecessary sublevels.
 func (l *Level) Trim() {
 	subLevelsToKeep := []*Level{}
-	for _, sublevel := range l.SubLevels {
+	for _, sublevel := range l.Sublevels {
 		if sublevel.Count > 0 {
 			subLevelsToKeep = append(subLevelsToKeep, sublevel)
 			sublevel.Trim()
 		}
 	}
-	l.SubLevels = subLevelsToKeep
-	if len(l.SubLevels) == 1 && l.SubLevels[0].Count == l.Count && l.SubLevels[0].Range.Single() {
+	l.Sublevels = subLevelsToKeep
+	if len(l.Sublevels) == 1 && l.Sublevels[0].Count == l.Count && l.Sublevels[0].Range.Single() {
 		if l.Fixed == nil {
 			l.Fixed = map[string]interface{}{}
 		}
-		l.Fixed[l.SublevelColumn] = l.SubLevels[0].Range.MinValue()
-		l.Events = append(l.Events, l.SubLevels[0].Events...)
-		for k, v := range l.SubLevels[0].Fixed {
+		l.Fixed[l.SublevelColumn] = l.Sublevels[0].Range.MinValue()
+		l.Events = append(l.Events, l.Sublevels[0].Events...)
+		for k, v := range l.Sublevels[0].Fixed {
 			l.Fixed[k] = v
 		}
-		l.SublevelColumn = l.SubLevels[0].SublevelColumn
-		l.SubLevels = l.SubLevels[0].SubLevels
+		l.SublevelColumn = l.Sublevels[0].SublevelColumn
+		l.Sublevels = l.Sublevels[0].Sublevels
 	}
 
 	eventsToRemove := 0
@@ -136,14 +136,54 @@ func (l *Level) Trim() {
 }
 
 func (l *Level) String() string {
-	result := fmt.Sprintf("Level (%s)[%v] [%v]", l.Column, l.Range, l.Events)
-	result += "\n"
+	return l.string(0)
+}
 
-	for _, sublevel := range l.SubLevels {
-		result += "\t" + strings.Replace(sublevel.String(), "\n", "\n\t", -1)
-		result += "\n"
+func (l *Level) string(indent int) string {
+	indentString := strings.Repeat("\t", indent)
+	numEventsString := ""
+	if len(l.Events) > 0 {
+		numEventsString = fmt.Sprintf(" %d events", len(l.Events))
 	}
+	fixedValuesString := ""
+	if len(l.Fixed) > 0 {
+		fixedValuesString = fmt.Sprintf(" fixed: %v", l.Fixed)
+	}
+
+	result := ""
+	if l.Column == "" {
+		// Base
+		result = fmt.Sprintf("Base%s%s\n", numEventsString, fixedValuesString)
+	} else {
+		rangeString := fmt.Sprint(l.Range)
+		if l.Range.Single() {
+			rangeString = fmt.Sprintf("{%v}", l.Range.MinValue())
+		}
+		result = indentString + fmt.Sprintf("%s => %s %s%s\n", l.Column, rangeString, numEventsString, fixedValuesString)
+	}
+	for _, sublevel := range l.Sublevels {
+		result += sublevel.string(indent+1) + "\n"
+	}
+	result = strings.TrimRight(result, "\n")
 	return result
+}
+
+// RawEvents returns the raw events represented by this level.
+func (l *Level) RawEvents() []Event {
+	events := make([]Event, 0, l.Count)
+	events = append(events, l.Events...)
+	for _, subLevel := range l.Sublevels {
+		events = append(events, subLevel.RawEvents()...)
+	}
+	for len(events) != l.Count {
+		events = append(events, Event{})
+	}
+	for i := range events {
+		for k, v := range l.Fixed {
+			events[i][k] = v
+		}
+	}
+	return events
 }
 
 // ColumnRange represents a range of values for a column.
