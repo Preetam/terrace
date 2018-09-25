@@ -41,25 +41,52 @@ func fromJSON(s string) interface{} {
 	return val
 }
 
+// Options represent different options to use during generation.
+type Options struct {
+	Fast     bool
+	CostType int
+}
+
 // Generate generates a Level.
-func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet, costType int) (*Level, error) {
+func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet, opts Options) (*Level, error) {
+	if opts.CostType == 0 {
+		opts.CostType = CostTypeAccess
+	}
+	maxOrderings := 4000.0
+	if opts.Fast {
+		maxOrderings = 10
+	}
+
 	var bestLevel *Level
 	var bestLevelCost = int(math.MaxInt64)
 	var bestColumnOrder = []string{}
 
 	columnSet := getColumnSet(events)
-	logger.Printf("Generation: Considering column set: %v", columnSet)
-	orderings := columnSet.permutate(0)
-	logger.Printf("Generation: %d total possible orderings", len(orderings))
-
+	if logger != nil {
+		logger.Printf("Generation: Considering column set: %v", columnSet)
+	}
+	var orderings []columnset
+	if opts.Fast {
+		max := len(columnSet)
+		if max > 5 {
+			max = 5
+		}
+		orderings = columnSet.permutate(max)
+	} else {
+		orderings = columnSet.permutate(0)
+	}
+	if logger != nil {
+		logger.Printf("Generation: %d total possible orderings", len(orderings))
+	}
 	columnRanges := getColumnRangesForColumnSet(columnSet, 16, events)
-	logger.Printf("Generation: Using column ranges %s", toJSON(columnRanges))
-
+	if logger != nil {
+		logger.Printf("Generation: Using column ranges %s", toJSON(columnRanges))
+	}
 	seenOrdering := map[string]bool{}
 
 ORDERINGS_LOOP:
 	for _, allColumns := range orderings {
-		if rand.Float64() > (4000 / float64(len(orderings))) {
+		if rand.Float64() > (maxOrderings / float64(len(orderings))) {
 			continue
 		}
 		for i := 1; i <= len(allColumns); i++ {
@@ -94,10 +121,11 @@ ORDERINGS_LOOP:
 			level.Trim()
 			cost := 0
 			for _, cs := range constraints {
-				cost += calculateCost(costType, level, cs, (float64(len(events)) / 1000))
+				cost += calculateCost(opts.CostType, level, cs, (float64(len(events)) / 1000))
 			}
-			logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
-
+			if logger != nil {
+				logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
+			}
 			if cost < bestLevelCost {
 				bestLevel = level
 				bestLevelCost = cost
@@ -108,80 +136,19 @@ ORDERINGS_LOOP:
 		}
 	}
 
-	logger.Printf("Generation: Best column order with cost %d: %v", bestLevelCost, bestColumnOrder)
-
-	logger.Printf("Generation: Generating final level")
+	if logger != nil {
+		logger.Printf("Generation: Best column order with cost %d: %v", bestLevelCost, bestColumnOrder)
+		logger.Printf("Generation: Generating final level")
+	}
 	bestLevel = &Level{}
 	for _, e := range events {
 		bestLevel.Push(e, bestColumnOrder, columnRanges)
 	}
-	logger.Printf("Generation: Trimming")
+	if logger != nil {
+		logger.Printf("Generation: Trimming")
+	}
 	bestLevel.Trim()
 	return bestLevel, nil
-}
-
-func explode(events []Event) []string {
-	entries := []string{}
-	for _, e := range events {
-		permutations := e.toKVs().permutate(0)
-		for _, p := range permutations {
-			keyStrings := []string{}
-			valueStrings := []string{}
-			for _, pair := range p {
-				keyStrings = append(keyStrings, pair.key)
-				valueStrings = append(valueStrings, toJSON(pair.value))
-			}
-			entries = append(entries, strings.Join(keyStrings, "\x00")+"\x00\x00"+strings.Join(valueStrings, "\x00"))
-		}
-	}
-	sort.Strings(entries)
-	return entries
-}
-
-func (e Event) toKVs() kvs {
-	result := kvs{}
-	for k, v := range e {
-		result = append(result, kv{key: k, value: v})
-	}
-	return result
-}
-
-func (e Event) fromKVs(pairs kvs) {
-	for _, pair := range pairs {
-		e[pair.key] = pair.value
-	}
-}
-
-type kv struct {
-	key   string
-	value interface{}
-}
-
-type kvs []kv
-
-func (pairs kvs) swap(i, j int) {
-	pairs[i], pairs[j] = pairs[j], pairs[i]
-}
-
-func (pairs kvs) permutate(n int) []kvs {
-	if n == 0 {
-		n = len(pairs)
-	}
-	results := []kvs{}
-	if n == 1 {
-		var newPairs kvs
-		return []kvs{append(newPairs, pairs...)}
-	}
-	for i := 0; i < n-1; i++ {
-		results = append(results, pairs.permutate(n-1)...)
-		if n%2 == 0 {
-			pairs.swap(i, n-1)
-		} else {
-			pairs.swap(0, n-1)
-		}
-	}
-	results = append(results, pairs.permutate(n-1)...)
-	return results
 }
 
 type columnset []string

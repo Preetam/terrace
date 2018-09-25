@@ -37,6 +37,7 @@ func main() {
 	constraintsFileFlag := flag.String("constraints", "", "constraints file (JSON)")
 	outFileFlag := flag.String("out", "", "output file")
 	sizeCost := flag.Bool("size-cost", false, "use size-based cost calculation")
+	fast := flag.Bool("fast", true, "Use the fast generation option with less accuracy")
 	flag.Parse()
 
 	if *inFileFlag == "" || *constraintsFileFlag == "" || *outFileFlag == "" {
@@ -74,11 +75,14 @@ func main() {
 		events = append(events, e)
 	}
 
-	costType := terrace.CostTypeAccess
-	if *sizeCost {
-		costType = terrace.CostTypeSize
+	opts := terrace.Options{
+		Fast:     *fast,
+		CostType: terrace.CostTypeAccess,
 	}
-	level, err := terrace.Generate(logger, events, constraints, costType)
+	if *sizeCost {
+		opts.CostType = terrace.CostTypeSize
+	}
+	level, err := terrace.Generate(logger, events, constraints, opts)
 	if err != nil {
 		logger.Fatalf("error generating Terrace file: %v", err)
 	}
