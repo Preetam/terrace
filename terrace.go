@@ -20,6 +20,8 @@ package terrace
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Preetam/query"
 )
 
 // Event represents an event.
@@ -36,12 +38,32 @@ func (e Event) CloneWithout(field string) Event {
 	return e2
 }
 
+// Fields returns a slice of fields within this event.
+func (e Event) Fields() []string {
+	fields := []string{}
+	for k := range e {
+		fields = append(fields, k)
+	}
+	return fields
+}
+
+// Get gets the value for field from the event. False
+// is returned if the field doesn't exist.
+func (e Event) Get(field string) (interface{}, bool) {
+	v, ok := e[field]
+	return v, ok
+}
+
+// Event satisfies the query.Row interface.
+var _ query.Row = Event{}
+
 // Level is a Terrace level.
 type Level struct {
 	// Column this level splits on
 	Column string `json:"column,omitempty"`
 	// Range of values covered by this level
-	Range          ColumnRange            `json:"range,omitempty"`
+	Range          JSONColumnRange        `json:"range,omitempty"`
+	InternalRange  ColumnRange            `json:"-"`
 	SublevelColumn string                 `json:"sublevel_column,omitempty"`
 	Sublevels      []*Level               `json:"sublevels,omitempty"`
 	Events         []Event                `json:"events,omitempty"`
@@ -86,13 +108,34 @@ func (l *Level) Push(event Event, sublevels []string, columnRanges map[string][]
 	// Create sublevels if we need to
 	if len(l.Sublevels) == 0 {
 		for _, r := range columnRanges[l.SublevelColumn] {
-			l.Sublevels = append(l.Sublevels, &Level{Column: l.SublevelColumn, Range: r})
+			sublevel := &Level{Column: l.SublevelColumn, InternalRange: r}
+			switch r.(type) {
+			case IntegerColumnRange:
+				sublevel.Range = JSONColumnRange{
+					Type: "int",
+					Min:  r.(IntegerColumnRange).Min,
+					Max:  r.(IntegerColumnRange).Max,
+				}
+			case FloatColumnRange:
+				sublevel.Range = JSONColumnRange{
+					Type: "float",
+					Min:  r.(FloatColumnRange).Min,
+					Max:  r.(FloatColumnRange).Max,
+				}
+			case StringColumnRange:
+				sublevel.Range = JSONColumnRange{
+					Type: "string",
+					Min:  r.(StringColumnRange).Min,
+					Max:  r.(StringColumnRange).Max,
+				}
+			}
+			l.Sublevels = append(l.Sublevels, sublevel)
 		}
 	}
 
 	for _, sublevel := range l.Sublevels {
-		if sublevel.Range.Contains(event[l.SublevelColumn]) {
-			if sublevel.Range.Single() {
+		if sublevel.InternalRange.Contains(event[l.SublevelColumn]) {
+			if sublevel.InternalRange.Single() {
 				event = event.CloneWithout(l.SublevelColumn)
 			}
 			sublevel.Push(event, sublevels[1:], columnRanges)
@@ -112,11 +155,11 @@ func (l *Level) Trim() {
 		}
 	}
 	l.Sublevels = subLevelsToKeep
-	if len(l.Sublevels) == 1 && l.Sublevels[0].Count == l.Count && l.Sublevels[0].Range.Single() {
+	if len(l.Sublevels) == 1 && l.Sublevels[0].Count == l.Count && l.Sublevels[0].InternalRange.Single() {
 		if l.Fixed == nil {
 			l.Fixed = map[string]interface{}{}
 		}
-		l.Fixed[l.SublevelColumn] = l.Sublevels[0].Range.MinValue()
+		l.Fixed[l.SublevelColumn] = l.Sublevels[0].InternalRange.MinValue()
 		l.Events = append(l.Events, l.Sublevels[0].Events...)
 		for k, v := range l.Sublevels[0].Fixed {
 			l.Fixed[k] = v
@@ -155,9 +198,9 @@ func (l *Level) string(indent int) string {
 		// Base
 		result = fmt.Sprintf("Base%s%s\n", numEventsString, fixedValuesString)
 	} else {
-		rangeString := fmt.Sprint(l.Range)
-		if l.Range.Single() {
-			rangeString = fmt.Sprintf("{%v}", l.Range.MinValue())
+		rangeString := fmt.Sprint(l.InternalRange)
+		if l.InternalRange.Single() {
+			rangeString = fmt.Sprintf("{%v}", l.InternalRange.MinValue())
 		}
 		result = indentString + fmt.Sprintf("%s => %s %s%s\n", l.Column, rangeString, numEventsString, fixedValuesString)
 	}
@@ -186,12 +229,49 @@ func (l *Level) RawEvents() []Event {
 	return events
 }
 
+func (l *Level) NewCursor() (query.Cursor, error) {
+	return &LevelCursor{
+		events: l.RawEvents(),
+	}, nil
+}
+
+type LevelCursor struct {
+	events []Event
+}
+
+func (cur *LevelCursor) Row() query.Row {
+	if len(cur.events) > 0 {
+		return cur.events[0]
+	}
+	return nil
+}
+
+func (cur *LevelCursor) Next() bool {
+	if len(cur.events) == 0 {
+		return false
+	}
+	cur.events = cur.events[1:]
+	return len(cur.events) > 0
+}
+
+func (cur *LevelCursor) Err() error {
+	return nil
+}
+
+var _ query.Cursor = &LevelCursor{}
+
 // ColumnRange represents a range of values for a column.
 type ColumnRange interface {
 	Contains(v interface{}) bool
 	// Whether this range represents a single value
 	Single() bool
 	MinValue() interface{}
+}
+
+type JSONColumnRange struct {
+	Type string      `json:"type"`
+	Min  interface{} `json:"min"`
+	Max  interface{} `json:"max"`
 }
 
 // IntegerColumnRange is an int column range.
@@ -294,7 +374,7 @@ type ConstraintSet map[string][]Constraint
 func (cs ConstraintSet) CheckLevel(level *Level) bool {
 	columnConstraints := cs[level.Column]
 	for _, cons := range columnConstraints {
-		if level.Range.Contains(cons.Value) {
+		if level.InternalRange.Contains(cons.Value) {
 			if cons.Operator == ConstraintOperatorNotEquals {
 				return false
 			}
@@ -306,3 +386,5 @@ func (cs ConstraintSet) CheckLevel(level *Level) bool {
 	}
 	return true
 }
+
+var _ query.Table = &Level{}
