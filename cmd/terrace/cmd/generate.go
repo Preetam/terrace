@@ -18,43 +18,112 @@ package cmd
  */
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"os"
 
+	"github.com/Preetam/terrace"
 	"github.com/spf13/cobra"
 )
 
-var generateOpts = struct {
+type generateCommand struct {
+	cobraCommand *cobra.Command
+
 	// Args
 	inFile  string
 	outFile string
 	// Flags
 	constraintsFile string
 	format          string
+	fast            bool
+	sizeCost        bool
 	verbose         bool
-}{}
+}
 
-// generateCmd represents the generate command
-var generateCmd = &cobra.Command{
-	Use:   "generate <input file> <output file>",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+func (cmd *generateCommand) Run() {
+	logger := log.New(os.Stdout, "", log.LstdFlags)
+	logger.Println("Running generate")
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Args: cobra.MinimumNArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("generate called")
-		generateOpts.inFile = args[0]
-		generateOpts.outFile = args[1]
-	},
+	eventsFile, err := ioutil.ReadFile(cmd.inFile)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	constraints := []terrace.ConstraintSet{}
+	if cmd.constraintsFile != "" {
+		constraintsFile, err := os.Open(cmd.constraintsFile)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		err = json.NewDecoder(constraintsFile).Decode(&constraints)
+		if err != nil {
+			logger.Fatalf("error reading constraints file: %v", err)
+		}
+	}
+
+	events := []terrace.Event{}
+	for _, eventBytes := range bytes.Split(eventsFile, []byte("\n")) {
+		e := terrace.Event{}
+		if len(eventBytes) == 0 {
+			continue
+		}
+		err = json.Unmarshal(bytes.TrimSpace(eventBytes), &e)
+		if err != nil {
+			logger.Fatal(err)
+		}
+		events = append(events, e)
+	}
+
+	opts := terrace.Options{
+		Fast:     cmd.fast,
+		CostType: terrace.CostTypeAccess,
+	}
+	if cmd.sizeCost {
+		opts.CostType = terrace.CostTypeSize
+	}
+	level, err := terrace.Generate(logger, events, constraints, opts)
+	if err != nil {
+		logger.Fatalf("error generating Terrace file: %v", err)
+	}
+
+	outFile, err := os.OpenFile(cmd.outFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	err = json.NewEncoder(outFile).Encode(level)
+	if err != nil {
+		logger.Fatalf("error writing Terrace file: %v", err)
+	}
+
 }
 
 func init() {
-	rootCmd.AddCommand(generateCmd)
+	generateCmd := &generateCommand{
+		cobraCommand: &cobra.Command{
+			Use:   "generate <input file> <output file>",
+			Short: "Generate a Terrace file",
+			Args:  cobra.MinimumNArgs(2),
+		},
+	}
+	generateCmd.cobraCommand.Run = func(cmd *cobra.Command, args []string) {
+		generateCmd.inFile = args[0]
+		generateCmd.outFile = args[1]
+		generateCmd.Run()
+	}
 
-	generateCmd.Flags().StringVar(&generateOpts.constraintsFile, "constraints", "", "Constraints file")
-	generateCmd.Flags().StringVar(&generateOpts.format, "format", "json", "Output file format")
-	generateCmd.Flags().BoolVarP(&generateOpts.verbose, "verbose", "v", false, "Verbose logging")
+	rootCmd.AddCommand(generateCmd.cobraCommand)
+
+	generateCmd.cobraCommand.
+		Flags().StringVar(&generateCmd.constraintsFile, "constraints", "", "Constraints file")
+	generateCmd.cobraCommand.
+		Flags().StringVar(&generateCmd.format, "format", "json", "Output file format")
+	generateCmd.cobraCommand.
+		Flags().BoolVar(&generateCmd.fast, "fast", true, "Fast generation")
+	generateCmd.cobraCommand.
+		Flags().BoolVar(&generateCmd.sizeCost, "size-cost", false, "Size-based cost")
+	generateCmd.cobraCommand.
+		Flags().BoolVarP(&generateCmd.verbose, "verbose", "v", false, "Verbose logging")
 }
