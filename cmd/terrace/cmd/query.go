@@ -57,14 +57,16 @@ func (cmd *queryCommand) Run() {
 		logger.Fatalf("error parsing query: %v", err)
 	}
 
-	fmt.Println(parsedQuery)
-
 	executor := query.NewExecutor(level)
 	queryResult, err := executor.Execute(parsedQuery)
 	if err != nil {
 		logger.Fatalf("error executing query: %v", err)
 	}
-	fmt.Println(queryResult.Rows())
+
+	for _, row := range queryResult.Rows() {
+		marshaled, _ := json.Marshal(row)
+		fmt.Printf("%s\n", marshaled)
+	}
 }
 
 func init() {
