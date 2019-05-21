@@ -20,6 +20,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -43,10 +44,19 @@ type generateCommand struct {
 }
 
 func (cmd *generateCommand) Run() {
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	logger := log.New(os.Stderr, "", log.LstdFlags)
 	logger.Println("Running generate")
 
-	eventsFile, err := ioutil.ReadFile(cmd.inFile)
+	var eventsFile []byte
+	var err error
+
+	if cmd.inFile == "-" {
+		logger.Println("Using stdin")
+		// stdin
+		eventsFile, err = ioutil.ReadAll(os.Stdin)
+	} else {
+		eventsFile, err = ioutil.ReadFile(cmd.inFile)
+	}
 	if err != nil {
 		logger.Fatal(err)
 	}
@@ -61,6 +71,9 @@ func (cmd *generateCommand) Run() {
 		if err != nil {
 			logger.Fatalf("error reading constraints file: %v", err)
 		}
+	} else {
+		logger.Println("Missing constraints file. Using size-based cost evaluation.")
+		cmd.sizeCost = true
 	}
 
 	events := []terrace.Event{}
@@ -75,6 +88,7 @@ func (cmd *generateCommand) Run() {
 		}
 		events = append(events, e)
 	}
+	logger.Println("Read", len(events), "events")
 
 	opts := terrace.Options{
 		Fast:     cmd.fast,
@@ -88,16 +102,24 @@ func (cmd *generateCommand) Run() {
 		logger.Fatalf("error generating Terrace file: %v", err)
 	}
 
-	outFile, err := os.OpenFile(cmd.outFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		logger.Fatal(err)
-	}
+	if cmd.outFile == "-" {
+		// stdout
+		jsonLevel, err := json.Marshal(level)
+		if err != nil {
+			logger.Fatalf("error encoding Terrace file: %v", err)
+		}
+		fmt.Println(string(jsonLevel))
+	} else {
+		outFile, err := os.OpenFile(cmd.outFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+		if err != nil {
+			logger.Fatal(err)
+		}
 
-	err = json.NewEncoder(outFile).Encode(level)
-	if err != nil {
-		logger.Fatalf("error writing Terrace file: %v", err)
+		err = json.NewEncoder(outFile).Encode(level)
+		if err != nil {
+			logger.Fatalf("error writing Terrace file: %v", err)
+		}
 	}
-
 }
 
 func init() {
