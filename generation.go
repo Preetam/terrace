@@ -25,6 +25,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 )
 
 func toJSON(v interface{}) string {
@@ -52,29 +53,22 @@ func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet, o
 	if opts.CostType == 0 {
 		opts.CostType = CostTypeAccess
 	}
-	maxOrderings := 4000.0
-	if opts.Fast {
-		maxOrderings = 10
-	}
 
 	var bestLevel *Level
 	var bestLevelCost = int(math.MaxInt64)
 	var bestColumnOrder = []string{}
+	seenOrdering := map[string]bool{}
+	var lock sync.Mutex
 
 	columnSet := getColumnSet(events)
 	if logger != nil {
 		logger.Printf("Generation: Considering column set: %v", columnSet)
 	}
-	var orderings []columnset
-	if opts.Fast {
-		max := len(columnSet)
-		if max > 5 {
-			max = 5
-		}
-		orderings = columnSet.permutate(max)
-	} else {
-		orderings = columnSet.permutate(0)
-	}
+	orderings := make(chan columnset)
+	go func() {
+		columnSet.permutateWithChannel(0, orderings)
+		close(orderings)
+	}()
 	if logger != nil {
 		logger.Printf("Generation: %d total possible orderings", len(orderings))
 	}
@@ -82,59 +76,85 @@ func Generate(logger *log.Logger, events []Event, constraints []ConstraintSet, o
 	if logger != nil {
 		logger.Printf("Generation: Using column ranges %s", toJSON(columnRanges))
 	}
-	seenOrdering := map[string]bool{}
 
-ORDERINGS_LOOP:
-	for _, allColumns := range orderings {
-		if rand.Float64() > (maxOrderings / float64(len(orderings))) {
-			continue
-		}
-		for i := 1; i <= len(allColumns); i++ {
-			columnOrder := allColumns[:i]
+	wg := sync.WaitGroup{}
+	permutations := 1.0
+	for i := range columnSet {
+		permutations *= (float64(i) + 1)
+	}
+	for x := 0; x < 4; x++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-			if seenOrdering[strings.Join(columnOrder, "")] {
-				continue
-			}
-			seenOrdering[strings.Join(columnOrder, "")] = true
-
-			// Rough filter: ignore orderings that are not constrained by
-			// the first column.
-			skipOrdering := true
-			for _, cs := range constraints {
-				if _, ok := cs[columnOrder[0]]; ok {
-					skipOrdering = false
-					break
-				}
-			}
-			if skipOrdering {
-				continue
-			}
-			level := &Level{}
-
-			for _, e := range events {
-				if rand.Float64() > (1000 / float64(len(events))) {
+		ORDERINGS_LOOP:
+			for allColumns := range orderings {
+				if rand.Float64() > (4000.0 / permutations) {
 					continue
 				}
-				level.Push(e, []string(columnOrder), columnRanges)
-			}
+				for i := 1; i <= len(allColumns); i++ {
+					columnOrder := allColumns[:i]
 
-			level.Trim()
-			cost := 0
-			for _, cs := range constraints {
-				cost += calculateCost(opts.CostType, level, cs, (float64(len(events)) / 1000))
+					lock.Lock()
+					if seenOrdering[strings.Join(columnOrder, "")] {
+						lock.Unlock()
+						continue
+					}
+					seenOrdering[strings.Join(columnOrder, "")] = true
+					lock.Unlock()
+
+					if opts.CostType == CostTypeAccess {
+						// Rough filter: ignore orderings that are not constrained by
+						// the first column.
+						skipOrdering := true
+						for _, cs := range constraints {
+							if _, ok := cs[columnOrder[0]]; ok {
+								skipOrdering = false
+								break
+							}
+						}
+						if skipOrdering {
+							continue
+						}
+					}
+
+					level := &Level{}
+
+					for _, e := range events {
+						if rand.Float64() > (1000 / float64(len(events))) {
+							continue
+						}
+						level.Push(e, []string(columnOrder), columnRanges)
+					}
+
+					level.Trim()
+					cost := 0
+					if opts.CostType == CostTypeAccess {
+						for _, cs := range constraints {
+							cost += calculateCost(opts.CostType, level, cs, (float64(len(events)) / 1000))
+						}
+					} else {
+						cost = calculateCost(opts.CostType, level, nil, 1)
+					}
+					if logger != nil {
+						logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
+					}
+					lock.Lock()
+					if cost < bestLevelCost {
+						bestLevel = level
+						bestLevelCost = cost
+						bestColumnOrder = []string(columnOrder)
+					} else {
+						lock.Unlock()
+						continue ORDERINGS_LOOP
+					}
+					lock.Unlock()
+				}
 			}
-			if logger != nil {
-				logger.Printf("Generation: Cost %d for column order %v", cost, columnOrder)
-			}
-			if cost < bestLevelCost {
-				bestLevel = level
-				bestLevelCost = cost
-				bestColumnOrder = []string(columnOrder)
-			} else {
-				continue ORDERINGS_LOOP
-			}
-		}
+		}()
 	}
+
+	wg.Wait()
 
 	if logger != nil {
 		logger.Printf("Generation: Best column order with cost %d: %v", bestLevelCost, bestColumnOrder)
@@ -179,6 +199,31 @@ func (cs columnset) permutate(n int) []columnset {
 	}
 	results = append(results, cs.permutate(n-1)...)
 	return results
+}
+
+func (cs columnset) permutateWithChannel(n int, results chan columnset) {
+	if n == 0 {
+		n = len(cs)
+		if n == 0 {
+			return
+		}
+	}
+	if n == 1 {
+		var newCS columnset
+		results <- append(newCS, cs...)
+		return
+	}
+	for i := 0; i < n-1; i++ {
+		cs.permutateWithChannel(n-1, results)
+		if n%2 == 0 {
+			// swap i, n-1
+			cs[i], cs[n-1] = cs[n-1], cs[i]
+		} else {
+			// swap 0, n-1
+			cs[0], cs[n-1] = cs[n-1], cs[0]
+		}
+	}
+	cs.permutateWithChannel(n-1, results)
 }
 
 // getColumnSet returns a good columnset for the given events.

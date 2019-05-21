@@ -24,7 +24,6 @@ import (
 	"os"
 
 	"github.com/Preetam/query"
-
 	"github.com/Preetam/terrace"
 	"github.com/spf13/cobra"
 )
