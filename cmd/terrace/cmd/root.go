@@ -18,7 +18,7 @@ package cmd
  */
 
 import (
-	"fmt"
+	"log"
 	"os"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -37,9 +37,10 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		logger.Fatalln(err)
 	}
 }
 
@@ -58,6 +59,8 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+
 	if cfgFile != "" {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
@@ -65,8 +68,7 @@ func initConfig() {
 		// Find home directory.
 		home, err := homedir.Dir()
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			logger.Fatalln(err)
 		}
 
 		// Search config in home directory with name ".terrace" (without extension).
@@ -78,6 +80,6 @@ func initConfig() {
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		logger.Println("Using config file:", viper.ConfigFileUsed())
 	}
 }

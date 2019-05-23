@@ -38,7 +38,7 @@ type queryCommand struct {
 }
 
 func (cmd *queryCommand) Run() {
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	logger := log.New(os.Stderr, "", log.LstdFlags)
 	logger.Println("Running query")
 
 	terraceFile, err := os.Open(cmd.terraceFile)
